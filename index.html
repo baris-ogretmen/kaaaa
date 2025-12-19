@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Barış Öğretmen - Hafıza Oyunu</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="https://unpkg.com/lucide-react@latest/dist/umd/lucide-react.min.js"></script>
+    <style>body { background-color: #1a1a1a; color: white; }</style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useRef } = React;
+        const { Play, RotateCcw, Trophy, Brain, Volume2, VolumeX } = LucideReact;
+
+        const FREQUENCIES = { green: 329.63, red: 261.63, yellow: 293.66, blue: 392.00, error: 110.00 };
+        const COLORS = [
+            { id: 'green', color: 'bg-green-500' },
+            { id: 'red', color: 'bg-red-500' },
+            { id: 'yellow', color: 'bg-yellow-400' },
+            { id: 'blue', color: 'bg-blue-500' }
+        ];
+
+        const MemoryGame = () => {
+            const [sequence, setSequence] = useState([]);
+            const [userStep, setUserStep] = useState(0);
+            const [gameState, setGameState] = useState('idle');
+            const [score, setScore] = useState(0);
+            const [highScore, setHighScore] = useState(0);
+            const [flashColor, setFlashColor] = useState(null);
+            
+            const audioCtxRef = useRef(null);
+
+            useEffect(() => {
+                const saved = localStorage.getItem('memory-highscore');
+                if (saved) setHighScore(parseInt(saved));
+            }, []);
+
+            const playTone = (colorId) => {
+                if (!audioCtxRef.current) audioCtxRef.current = new (window.AudioContext || window.webkitAudioContext)();
+                const ctx = audioCtxRef.current;
+                const osc = ctx.createOscillator();
+                const gain = ctx.createGain();
+                osc.type = colorId === 'error' ? 'sawtooth' : 'sine';
+                osc.frequency.setValueAtTime(FREQUENCIES[colorId], ctx.currentTime);
+                gain.gain.setValueAtTime(0.1, ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.00001, ctx.currentTime + 0.5);
+                osc.connect(gain);
+                gain.connect(ctx.destination);
+                osc.start();
+                osc.stop(ctx.currentTime + 0.5);
+            };
+
+            const startGame = () => {
+                setSequence([]);
+                setScore(0);
+                setUserStep(0);
+                addToSequence([]);
+            };
+
+            const addToSequence = (currentSeq) => {
+                setGameState('showing');
+                const colors = ['green', 'red', 'yellow', 'blue'];
+                const randomColor = colors[Math.floor(Math.random() * 4)];
+                const newSeq = [...currentSeq, randomColor];
+                setSequence(newSeq);
+                
+                setTimeout(() => playSequence(newSeq), 1000);
+            };
+
+            const playSequence = async (seq) => {
+                for (let i = 0; i < seq.length; i++) {
+                    await new Promise(r => setTimeout(r, 300));
+                    setFlashColor(seq[i]);
+                    playTone(seq[i]);
+                    await new Promise(r => setTimeout(r, 500));
+                    setFlashColor(null);
+                }
+                setGameState('playing');
+                setUserStep(0);
+            };
+
+            const handleColorClick = (colorId) => {
+                if (gameState !== 'playing') return;
+                playTone(colorId);
+                setFlashColor(colorId);
+                setTimeout(() => setFlashColor(null), 200);
+
+                if (colorId === sequence[userStep]) {
+                    if (userStep + 1 === sequence.length) {
+                        setScore(sequence.length);
+                        setTimeout(() => addToSequence(sequence), 1000);
+                    } else {
+                        setUserStep(userStep + 1);
+                    }
+                } else {
+                    setGameState('idle');
+                    playTone('error');
+                    if (score > highScore) {
+                        setHighScore(score);
+                        localStorage.setItem('memory-highscore', score);
+                    }
+                    alert("Oyun Bitti! Skorun: " + score);
+                }
+            };
+
+            return (
+                <div className="min-h-screen flex flex-col items-center justify-center p-4">
+                    <h1 className="text-4xl font-bold mb-8 text-white flex gap-2"><Brain /> Hafıza Ustası</h1>
+                    <div className="flex gap-4 mb-8 text-xl text-white">
+                        <div>Skor: {score}</div>
+                        <div className="text-yellow-400">Rekor: {highScore}</div>
+                    </div>
+                    
+                    <div className="grid grid-cols-2 gap-4 p-4 bg-gray-800 rounded-full border-4 border-gray-700">
+                        {COLORS.map((btn) => (
+                            <button
+                                key={btn.id}
+                                onClick={() => handleColorClick(btn.id)}
+                                className={`w-32 h-32 rounded-2xl transition-all ${btn.color} ${flashColor === btn.id ? 'brightness-150 scale-95' : 'opacity-80'}`}
+                            />
+                        ))}
+                    </div>
+                    
+                    {gameState === 'idle' && (
+                        <button onClick={startGame} className="mt-8 bg-green-500 text-white px-8 py-3 rounded-full font-bold text-xl animate-bounce">
+                            BAŞLA
+                        </button>
+                    )}
+                </div>
+            );
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<MemoryGame />);
+    </script>
+</body>
+</html>
